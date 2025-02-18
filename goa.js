@@ -21,7 +21,7 @@ class NodeGo {
             { code: 'T011', name: 'Share Your Referral Link on X' },
             { code: 'T012', name: 'Retweet & Like US' },
             { code: 'T014', name: 'Comment on our post & Tag 3 friends' },
-            { code: 'T100', name: 'Invite 1 friends' },
+            { code: 'T100', name: 'Invite 1 friend' },
             { code: 'T101', name: 'Invite 3 friends' },
             { code: 'T102', name: 'Invite 5 friends' },
             { code: 'T103', name: 'Invite 10 friends' }
@@ -66,7 +66,7 @@ class NodeGo {
                 lastPingTimestamp: 0
             }));
         } catch (error) {
-            this.log(`Lỗi đọc tài khoản: ${error}`, 'error');
+            this.log(`Error reading accounts: ${error}`, 'error');
             process.exit(1);
         }
     }
@@ -92,7 +92,7 @@ class NodeGo {
             return await axios(config);
         } catch (error) {
             if (error.code === 'ECONNREFUSED' || error.code === 'ETIMEDOUT') {
-                throw new Error(`Kết nối không thành công: ${error.message}`);
+                throw new Error(`Connection failed: ${error.message}`);
             }
             throw error;
         }
@@ -115,7 +115,7 @@ class NodeGo {
                 }))
             };
         } catch (error) {
-            this.log(`Không lấy được thông tin người dùng: ${error.message}`, 'error');
+            this.log(`Failed to fetch user info: ${error.message}`, 'error');
             throw error;
         }
     }
@@ -144,93 +144,9 @@ class NodeGo {
                 metadataId: response.data.metadata.id
             };
         } catch (error) {
-            this.log(`Ping không thành công: ${error.message}`, 'error');
+            this.log(`Ping failed: ${error.message}`, 'error');
             throw error;
         }
-    }
-
-    async dailyCheckin(token, proxy) {
-        try {
-            const response = await this.makeRequest(token, '/user/checkin', 'POST', null, proxy);
-            return {
-                statusCode: response.data.statusCode,
-                message: response.data.message,
-                userData: response.data.metadata.user
-            };
-        } catch (error) {
-            const statusCode = error.response?.data?.statusCode || error.response?.status || 500;
-            const message = error.response?.data?.message || error.message;
-            throw {
-                statusCode,
-                message,
-                error: true
-            };
-        }
-    }
-
-    async claimTask(token, proxy, taskId) {
-        try {
-            const response = await this.makeRequest(token, '/user/task', 'POST', { taskId }, proxy);
-            return {
-                statusCode: response.data.statusCode,
-                message: response.data.message,
-                userData: response.data.metadata?.user
-            };
-        } catch (error) {
-            const statusCode = error.response?.data?.statusCode || error.response?.status || 500;
-            const message = error.response?.data?.message || error.message;
-            throw {
-                statusCode,
-                message,
-                error: true
-            };
-        }
-    }
-
-    async processTasks(token, proxy, completedTasks) {
-        const results = [];
-        
-        for (const task of this.tasksList) {
-            if (!completedTasks.includes(task.code)) {
-                try {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
-                    const result = await this.claimTask(token, proxy, task.code);
-                    results.push({
-                        code: task.code,
-                        name: task.name,
-                        status: 'Thành công',
-                        statusCode: result.statusCode,
-                        message: result.message
-                    });
-                    this.log(`Nhiệm vụ ${task.code} (${task.name}):`, 'success');
-                    this.log(`Trạng thái: ${result.statusCode}`, 'success');
-                    this.log(`Thông tin: ${result.message}`, 'success');
-                } catch (error) {
-                    results.push({
-                        code: task.code,
-                        name: task.name,
-                        status: 'Thất bại',
-                        statusCode: error.statusCode,
-                        message: error.message
-                    });
-                    const logType = error.statusCode >= 500 ? 'error' : 'warning';
-                    this.log(`Nhiệm vụ ${task.code} (${task.name}):`, logType);
-                    this.log(`Trạng thái: ${error.statusCode}`, logType);
-                    this.log(`Thông tin: ${error.message}`, logType);
-                }
-            } else {
-                results.push({
-                    code: task.code,
-                    name: task.name,
-                    status: 'Bỏ qua',
-                    statusCode: 200,
-                    message: 'Nhiệm vụ đã hoàn thành'
-                });
-                this.log(`Nhiệm vụ ${task.code} (${task.name}): Hoàn thành`);
-            }
-        }
-        
-        return results;
     }
 
     async processInitialTasks(account) {
@@ -238,26 +154,15 @@ class NodeGo {
             this.log('='.repeat(50));
             
             const userInfo = await this.getUserInfo(account.token, account.proxy);
-            this.log(`Xử lý tài khoản: ${userInfo.username} (${userInfo.email})`, 'custom');
-            
-            try {
-                const checkinResponse = await this.dailyCheckin(account.token, account.proxy);
-                this.log(`Điểm danh hàng ngày:`, 'success');
-                this.log(`Trạng thái: ${checkinResponse.statusCode}`, 'success');
-                this.log(`Thông tin: ${checkinResponse.message}`, 'success');
-            } catch (error) {
-                this.log(`Điểm danh hàng ngày:`, 'warning');
-                this.log(`Trạng thái: ${error.statusCode}`, 'warning');
-                this.log(`Thông tin: ${error.message}`, 'warning');
-            }
+            this.log(`Processing account: ${userInfo.username} (${userInfo.email})`, 'custom');
 
-            this.log('\nBắt đầu làm nhệm vụ...');
+            this.log('\nStarting tasks...');
             await this.processTasks(account.token, account.proxy, userInfo.socialTasks || []);
 
-            this.log('\nLàm nhiệm vụ đã hoàn thành', 'success');
+            this.log('\nTasks completed', 'success');
             this.log('='.repeat(50));
         } catch (error) {
-            this.log(`Lỗi khi làm nhiệm vụ: ${error.message}`, 'error');
+            this.log(`Error processing tasks: ${error.message}`, 'error');
             this.log('='.repeat(50));
         }
     }
@@ -265,41 +170,41 @@ class NodeGo {
     async processPingForAccount(account) {
         try {
             const userInfo = await this.getUserInfo(account.token, account.proxy);
-            this.log(`\nPing: Tài khoản ${userInfo.username}`, 'custom');
+            this.log(`\nPing: Account ${userInfo.username}`, 'custom');
             
             const pingResponse = await this.ping(account);
             this.log(`Ping Status:`, 'success');
-            this.log(`Ttạng thái: ${pingResponse.statusCode}`, 'success');
-            this.log(`Thông tin: ${pingResponse.message}`, 'success');
+            this.log(`Status: ${pingResponse.statusCode}`, 'success');
+            this.log(`Message: ${pingResponse.message}`, 'success');
             
             const updatedUserInfo = await this.getUserInfo(account.token, account.proxy);
             if (updatedUserInfo.nodes.length > 0) {
                 this.log('Node status:', 'custom');
                 updatedUserInfo.nodes.forEach((node, index) => {
-                    this.log(`Node ${index + 1}: Hôm nay nhận được: ${node.todayPoint}`, 'custom');
+                    this.log(`Node ${index + 1}: Points today: ${node.todayPoint}`, 'custom');
                 });
             }
         } catch (error) {
-            this.log(`Lỗi khi Ping tài khoản: ${error.message}`, 'error');
+            this.log(`Error pinging account: ${error.message}`, 'error');
         }
     }
 
     async start() {
         process.on('SIGINT', () => {
-            this.log('\nDừng code...', 'warning');
+            this.log('\nStopping script...', 'warning');
             this.isRunning = false;
             setTimeout(() => process.exit(0), 1000);
         });
 
-        this.log('\n🚀 Dân Cày Airdrop...', 'warning');
+        this.log('\n🚀 Running Airdrop Automation...', 'warning');
         for (const account of this.accounts) {
             if (!this.isRunning) break;
             await this.processInitialTasks(account);
         }
 
-        this.log('\n⚡ Bắt đầu Ping...', 'warning');
+        this.log('\n⚡ Starting Ping...', 'warning');
         while (this.isRunning) {
-            this.log(`\n⏰ Ping bắt đầu từ ${new Date().toLocaleString()}`);
+            this.log(`\n⏰ Ping cycle started at ${new Date().toLocaleString()}`);
             
             for (const account of this.accounts) {
                 if (!this.isRunning) break;
@@ -307,7 +212,7 @@ class NodeGo {
             }
 
             if (this.isRunning) {
-                this.log('\nChờ 20 giây rồi bắt đầu vòng lặp tiếp theo...', 'info');
+                this.log('\nWaiting 20 seconds before the next loop...', 'info');
                 await new Promise(resolve => setTimeout(resolve, 20000));
             }
         }
